@@ -64,6 +64,112 @@ definitions:
       username:
         type: string
     type: object
+  deck.AddCardRequest:
+    properties:
+      content:
+        minLength: 1
+        type: string
+      type:
+        type: string
+    required:
+    - content
+    - type
+    type: object
+  deck.CardResponse:
+    properties:
+      card:
+        $ref: '#/definitions/domain.Card'
+    type: object
+  deck.CreateDeckRequest:
+    properties:
+      is_public:
+        type: boolean
+      mode:
+        type: string
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - mode
+    - name
+    type: object
+  deck.DeckDetailResponse:
+    properties:
+      cards:
+        items:
+          $ref: '#/definitions/domain.Card'
+        type: array
+      deck:
+        $ref: '#/definitions/domain.Deck'
+    type: object
+  deck.DeckListResponse:
+    properties:
+      decks:
+        items:
+          $ref: '#/definitions/domain.Deck'
+        type: array
+    type: object
+  deck.DeckResponse:
+    properties:
+      deck:
+        $ref: '#/definitions/domain.Deck'
+    type: object
+  deck.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  deck.MessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  deck.UpdateDeckRequest:
+    properties:
+      is_public:
+        type: boolean
+      mode:
+        type: string
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - mode
+    - name
+    type: object
+  domain.Card:
+    properties:
+      content:
+        type: string
+      deckID:
+        type: string
+      id:
+        type: string
+      type:
+        description: truth | dare
+        type: string
+    type: object
+  domain.Deck:
+    properties:
+      cardCount:
+        type: integer
+      createdAt:
+        type: string
+      createdBy:
+        type: string
+      id:
+        type: string
+      isPublic:
+        type: boolean
+      isSystem:
+        type: boolean
+      mode:
+        type: string
+      name:
+        type: string
+    type: object
 info:
   contact: {}
   description: Social Deck backend API.
@@ -188,6 +294,315 @@ paths:
       summary: Register a new user
       tags:
       - Auth
+  /decks:
+    get:
+      description: Get all public decks, including system decks and public user decks.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deck.DeckListResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      summary: List public decks
+      tags:
+      - Decks
+    post:
+      consumes:
+      - application/json
+      description: Create a new deck owned by the authenticated user.
+      parameters:
+      - description: Create deck request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deck.CreateDeckRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/deck.DeckResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a deck
+      tags:
+      - Decks
+  /decks/{id}:
+    delete:
+      description: Delete a deck owned by the authenticated user.
+      parameters:
+      - description: Deck ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deck.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a deck
+      tags:
+      - Decks
+    get:
+      description: Get a deck and its cards. Private decks are only available to their
+        owner.
+      parameters:
+      - description: Deck ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deck.DeckDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get deck detail
+      tags:
+      - Decks
+    put:
+      consumes:
+      - application/json
+      description: Update name, mode, and visibility for a deck owned by the authenticated
+        user.
+      parameters:
+      - description: Deck ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update deck request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deck.UpdateDeckRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deck.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a deck
+      tags:
+      - Decks
+  /decks/{id}/cards:
+    post:
+      consumes:
+      - application/json
+      description: Add a truth or dare card to a deck owned by the authenticated user.
+      parameters:
+      - description: Deck ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Add card request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/deck.AddCardRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/deck.CardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Add a card to a deck
+      tags:
+      - Decks
+  /decks/{id}/cards/{cardId}:
+    delete:
+      description: Delete a card from a deck owned by the authenticated user.
+      parameters:
+      - description: Deck ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Card ID
+        in: path
+        name: cardId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deck.MessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a card from a deck
+      tags:
+      - Decks
+  /decks/me:
+    get:
+      description: Get all decks owned by the authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deck.DeckListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/deck.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List my decks
+      tags:
+      - Decks
 securityDefinitions:
   BearerAuth:
     in: header

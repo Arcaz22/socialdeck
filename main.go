@@ -9,6 +9,7 @@ import (
 	docs "github.com/socialdeck/backend/docs"
 	"github.com/socialdeck/backend/internal/config"
 	"github.com/socialdeck/backend/modules/auth"
+	"github.com/socialdeck/backend/modules/deck"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -54,6 +55,11 @@ func main() {
 	authService := auth.NewService(authRepo, rdb, cfg)
 	authHandler := auth.NewHandler(authService, cfg)
 
+	// Wire up deck
+	deckRepo := deck.NewRepository(db)
+	deckService := deck.NewService(deckRepo)
+	deckHandler := deck.NewHandler(deckService)
+
 	// Router
 	r := gin.Default()
 
@@ -66,6 +72,7 @@ func main() {
 
 	api := r.Group("/api/v1")
 	auth.RegisterRoutes(api, authHandler, authService)
+	deck.RegisterRoutes(api, deckHandler, authService)
 
 	log.Printf("server running on :%s", cfg.AppPort)
 	log.Printf("api docs available at http://localhost:%s/docs/index.html", cfg.AppPort)
