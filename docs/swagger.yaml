@@ -164,10 +164,78 @@ definitions:
       isPublic:
         type: boolean
       isSystem:
+        description: true = deck bawaan app, tidak bisa diedit
         type: boolean
       mode:
+        description: truth_or_dare | truth_or_truth | talk_more
         type: string
       name:
+        type: string
+    type: object
+  domain.PlayerInfo:
+    properties:
+      is_connected:
+        type: boolean
+      turn_order:
+        type: integer
+      user_id:
+        type: string
+      username:
+        type: string
+    type: object
+  game.CreateRoomRequest:
+    properties:
+      deck_id:
+        type: string
+    required:
+    - deck_id
+    type: object
+  game.GameErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  game.GameMessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  game.GameRoomResponse:
+    properties:
+      code:
+        type: string
+      session_id:
+        type: string
+    type: object
+  game.JoinRoomRequest:
+    properties:
+      code:
+        type: string
+    required:
+    - code
+    type: object
+  game.RoomStatePayload:
+    properties:
+      code:
+        type: string
+      current_turn_user_id:
+        type: string
+      host_id:
+        type: string
+      players:
+        items:
+          $ref: '#/definitions/domain.PlayerInfo'
+        type: array
+      session_id:
+        type: string
+      status:
+        type: string
+    type: object
+  game.WebSocketTicketResponse:
+    properties:
+      expires_in:
+        type: integer
+      ticket:
         type: string
     type: object
 info:
@@ -603,6 +671,226 @@ paths:
       summary: List my decks
       tags:
       - Decks
+  /game/rooms:
+    post:
+      consumes:
+      - application/json
+      description: Create a game room from a deck. The authenticated user becomes
+        the host.
+      parameters:
+      - description: Create room request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.CreateRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/game.GameRoomResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create game room
+      tags:
+      - Game
+  /game/rooms/{id}/leave:
+    post:
+      description: Leave a waiting room. If the host leaves while waiting, the room
+        is finished/cancelled.
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.GameMessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Leave game room
+      tags:
+      - Game
+  /game/rooms/{id}/state:
+    get:
+      description: Get current game room state, players, host, and current turn.
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.RoomStatePayload'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get game room state
+      tags:
+      - Game
+  /game/rooms/{id}/ws:
+    get:
+      description: Upgrade to a WebSocket connection for realtime game events. Get
+        a short-lived ticket from /game/rooms/{id}/ws-ticket first, then pass it as
+        query parameter.
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Short-lived WebSocket ticket
+        in: query
+        name: ticket
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+      summary: Connect to game room WebSocket
+      tags:
+      - Game
+  /game/rooms/{id}/ws-ticket:
+    post:
+      description: Create a short-lived one-time ticket for connecting to a game room
+        WebSocket.
+      parameters:
+      - description: Session ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.WebSocketTicketResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create WebSocket ticket
+      tags:
+      - Game
+  /game/rooms/join:
+    post:
+      consumes:
+      - application/json
+      description: Join an existing waiting game room by room code.
+      parameters:
+      - description: Join room request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.JoinRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.GameRoomResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.GameErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Join game room
+      tags:
+      - Game
 securityDefinitions:
   BearerAuth:
     in: header
