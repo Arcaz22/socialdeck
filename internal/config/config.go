@@ -8,7 +8,8 @@ import (
 )
 
 type Config struct {
-	AppPort string
+	AppPort       string
+	MigrationsDir string
 
 	PostgresHost     string
 	PostgresPort     string
@@ -18,13 +19,13 @@ type Config struct {
 
 	RedisURL string
 
-	AuthSecretKey             string
-	AccessTokenTTLMinutes     int
-	RefreshTokenTTLDays       int
-	RefreshTokenCookieName    string
-	RefreshTokenCookieSecure  bool
+	AuthSecretKey              string
+	AccessTokenTTLMinutes      int
+	RefreshTokenTTLDays        int
+	RefreshTokenCookieName     string
+	RefreshTokenCookieSecure   bool
 	RefreshTokenCookieSameSite string
-	RefreshTokenCookiePath    string
+	RefreshTokenCookiePath     string
 }
 
 func Load() *Config {
@@ -36,6 +37,7 @@ func Load() *Config {
 
 	return &Config{
 		AppPort:          getEnv("APP_PORT", "8080"),
+		MigrationsDir:    getEnv("MIGRATIONS_DIR", "migrations"),
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:     getEnv("POSTGRES_PORT", "5432"),
 		PostgresDB:       os.Getenv("POSTGRES_DB"),

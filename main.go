@@ -2,8 +2,6 @@ package main
 
 import (
 	"log"
-	"path/filepath"
-	"runtime"
 
 	"github.com/gin-gonic/gin"
 	docs "github.com/socialdeck/backend/docs"
@@ -36,11 +34,7 @@ func main() {
 	defer db.Close()
 
 	// Auto migrate
-	_, filename, _, _ := runtime.Caller(0)
-	root := filepath.Dir(filename)
-	migrationsDir := filepath.Join(root, "migrations")
-
-	if err := config.Migrate(db, migrationsDir); err != nil {
+	if err := config.Migrate(db, cfg.MigrationsDir); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 

@@ -26,6 +26,9 @@ func Migrate(db *sqlx.DB, migrationsDir string) error {
 	if err != nil {
 		return fmt.Errorf("glob migrations: %w", err)
 	}
+	if len(files) == 0 {
+		return fmt.Errorf("no migration files found in %s", migrationsDir)
+	}
 	sort.Strings(files)
 
 	for _, file := range files {

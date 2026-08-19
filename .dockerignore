@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.env.*
+README.md
+TESTING_WEBSOCKET.md
+game-ws-test.sh
+docker-compose.yml
+Dockerfile
+.dockerignore
+.github
+*.md
