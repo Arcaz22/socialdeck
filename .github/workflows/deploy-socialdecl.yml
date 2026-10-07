@@ -1,6 +1,16 @@
-name: Deploy Socialdeck Backend
+name: Build and Deploy Socialdeck Backend
 
 on:
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: Deployment slot to update
+        required: true
+        default: blue
+        type: choice
+        options:
+          - blue
+          - green
   push:
     branches: [main]
     paths:
@@ -13,6 +23,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_SLOT: ${{ inputs.slot || 'blue' }}
+      IMAGE_TAG: ${{ github.sha }}
+      IMAGE: ${{ secrets.DOCKER_USERNAME }}/socialdeck-backend
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,43 +42,53 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/socialdeck-backend
-          SHA_TAG=${{ github.sha }}
-          docker build -t $IMAGE:$SHA_TAG -t $IMAGE:latest .
-          docker push $IMAGE:$SHA_TAG
-          docker push $IMAGE:latest
+          docker build -t "$IMAGE:$IMAGE_TAG" -t "$IMAGE:main" .
+          docker push "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:main"
 
       - name: Install cloudflared
+        env:
+          CLOUDFLARED_VERSION: 2026.9.1
         run: |
-          curl -L --output /usr/local/bin/cloudflared \
-            https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          set -euo pipefail
+          curl -fsSL -o /usr/local/bin/cloudflared \
+            "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
           chmod +x /usr/local/bin/cloudflared
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.MINI_PC_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+      - name: Configure SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
-      - name: Configure SSH over Cloudflare Tunnel
+      - name: Configure Cloudflare SSH
         env:
           TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          cat <<EOF >> ~/.ssh/config
-          Host mini-pc
-            HostName ssh.rampung.space
-            User ${{ secrets.MINI_PC_USER }}
-            IdentityFile ~/.ssh/id_rsa
-            StrictHostKeyChecking no
-            ProxyCommand cloudflared access ssh --hostname %h --service-token-id $TUNNEL_SERVICE_TOKEN_ID --service-token-secret $TUNNEL_SERVICE_TOKEN_SECRET
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat >> ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            IdentityAgent $SSH_AUTH_SOCK
+            StrictHostKeyChecking accept-new
+            ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h --service-token-id $TUNNEL_SERVICE_TOKEN_ID --service-token-secret $TUNNEL_SERVICE_TOKEN_SECRET
           EOF
+          chmod 600 ~/.ssh/config
 
-      - name: Deploy to Mini PC
+      - name: Deploy image by commit SHA
         run: |
-          ssh mini-pc "cd ~/infrastructure && \
-            docker compose pull app-socialdeck && \
-            docker compose up -d --wait app-socialdeck && \
-            docker compose ps app-socialdeck && \
-            docker image prune -f && \
-            echo '✓ Socialdeck Backend successfully deployed!'"
+          ssh deploy-target \
+            "DEPLOY_PATH='$DEPLOY_PATH' DEPLOY_SLOT='$DEPLOY_SLOT' IMAGE_TAG='$IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          export COMPOSE_PROJECT_NAME="infrastructure"
+          export SOCIALDECK_IMAGE_TAG="$IMAGE_TAG"
+          docker compose config -q
+          docker compose pull app-socialdeck
+          docker compose up -d --wait app-socialdeck
+          docker compose ps app-socialdeck
+          docker image prune -f
+          REMOTE_SCRIPT
