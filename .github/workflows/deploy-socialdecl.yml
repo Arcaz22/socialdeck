@@ -6,11 +6,22 @@ on:
       slot:
         description: Deployment slot to update
         required: true
-        default: blue
+        default: auto
         type: choice
         options:
+          - auto
           - blue
           - green
+      promote:
+        description: Switch Nginx traffic to this slot after healthcheck
+        required: true
+        default: false
+        type: boolean
+      image_tag:
+        description: Optional existing image tag for rollback
+        required: false
+        default: ''
+        type: string
   push:
     branches: [main]
     paths:
@@ -27,8 +38,10 @@ jobs:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
       DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      DEPLOY_SLOT: ${{ inputs.slot || 'blue' }}
-      IMAGE_TAG: ${{ github.sha }}
+      DEPLOY_SLOT: ${{ inputs.slot || 'auto' }}
+      PROMOTE: ${{ inputs.promote || false }}
+      IMAGE_TAG: ${{ inputs.image_tag || github.sha }}
+      ROLLBACK_TAG: ${{ inputs.image_tag }}
       IMAGE: ${{ secrets.DOCKER_USERNAME }}/socialdeck-backend
     steps:
       - name: Checkout code
@@ -42,6 +55,10 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
+          if [ -n "$ROLLBACK_TAG" ]; then
+            echo "Using existing image tag: $ROLLBACK_TAG"
+            exit 0
+          fi
           docker build -t "$IMAGE:$IMAGE_TAG" -t "$IMAGE:main" .
           docker push "$IMAGE:$IMAGE_TAG"
           docker push "$IMAGE:main"
@@ -81,14 +98,40 @@ jobs:
       - name: Deploy image by commit SHA
         run: |
           ssh deploy-target \
-            "DEPLOY_PATH='$DEPLOY_PATH' DEPLOY_SLOT='$DEPLOY_SLOT' IMAGE_TAG='$IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
+            "DEPLOY_PATH='$DEPLOY_PATH' DEPLOY_SLOT='$DEPLOY_SLOT' PROMOTE='$PROMOTE' IMAGE_TAG='$IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
           set -euo pipefail
           cd "$DEPLOY_PATH"
-          export COMPOSE_PROJECT_NAME="infrastructure"
-          export SOCIALDECK_IMAGE_TAG="$IMAGE_TAG"
-          docker compose config -q
-          docker compose pull app-socialdeck
-          docker compose up -d --wait app-socialdeck
-          docker compose ps app-socialdeck
+          if [ "$DEPLOY_SLOT" = "auto" ]; then
+            ACTIVE_SLOT="$(cat .active-slot-socialdeck 2>/dev/null || true)"
+            if [ -z "$ACTIVE_SLOT" ]; then
+              if grep -q 'server app-socialdeck-blue:' nginx/active/upstreams-socialdeck.conf 2>/dev/null; then
+                ACTIVE_SLOT=blue
+              elif grep -q 'server app-socialdeck-green:' nginx/active/upstreams-socialdeck.conf 2>/dev/null; then
+                ACTIVE_SLOT=green
+              else
+                ACTIVE_SLOT=green
+              fi
+            fi
+            if [ "$ACTIVE_SLOT" = "blue" ]; then TARGET_SLOT=green; else TARGET_SLOT=blue; fi
+          else
+            TARGET_SLOT="$DEPLOY_SLOT"
+          fi
+          export COMPOSE_PROJECT_NAME="apps-${TARGET_SLOT}"
+          if [ "$TARGET_SLOT" = "blue" ]; then
+            export SOCIALDECK_BLUE_IMAGE_TAG="$IMAGE_TAG"
+          else
+            export SOCIALDECK_GREEN_IMAGE_TAG="$IMAGE_TAG"
+          fi
+          docker compose -f docker-compose.apps.yml --profile "$TARGET_SLOT" config -q
+          docker compose -f docker-compose.apps.yml --profile "$TARGET_SLOT" pull "app-socialdeck-${TARGET_SLOT}"
+          docker compose -f docker-compose.apps.yml --profile "$TARGET_SLOT" up -d --wait "app-socialdeck-${TARGET_SLOT}"
+          docker compose -f docker-compose.apps.yml --profile "$TARGET_SLOT" ps "app-socialdeck-${TARGET_SLOT}"
+
+          if [ "$PROMOTE" = "true" ]; then
+            cp "nginx/slots/socialdeck-${TARGET_SLOT}.conf" nginx/active/upstreams-socialdeck.conf
+            docker compose -p infrastructure -f docker-compose.yml exec -T nginx nginx -t
+            docker compose -p infrastructure -f docker-compose.yml exec -T nginx nginx -s reload
+            printf '%s\n' "$TARGET_SLOT" > .active-slot-socialdeck
+          fi
           docker image prune -f
           REMOTE_SCRIPT
